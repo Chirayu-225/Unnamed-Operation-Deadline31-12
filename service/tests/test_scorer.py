@@ -1,4 +1,4 @@
-from app.agent.generator import ScanResult
+from app.agent.generator import GeneratorAgent, ScanResult
 from app.agent.semantic_reasoning import SemanticFlag
 from app.agent.verifier import VerificationLabel, VerifiedFlag
 from app.canonical.models import CanonicalTable, ColumnSchema, ColumnType
@@ -287,3 +287,52 @@ def test_criticality_weighting_end_to_end_with_real_null_check():
     completeness = next(m for m in card.metric_scores if m.metric == MetricCategory.COMPLETENESS)
     assert completeness.flagged_weight == 2.0  # row 1's required-field weight
     assert completeness.score == round(100 * (1 - 2 / 3), 1)
+
+
+def test_full_pipeline_frozen_baseline_catches_scoring_drift():
+    """Anti-regression guard for the Finding-model refactor's central
+    claim: "the scorer now builds Finding[] internally, but produces
+    unchanged legacy ScoreCard/MetricScore output." That claim was
+    verified manually (a live run_schema_eval.py comparison recomputed
+    the same aggregate_score before and after the refactor), but
+    nothing pinned it as an automated check — so a future change to
+    the Finding conversion, severity mapping, or scoring math could
+    silently drift and nothing in `pytest -q` would catch it.
+
+    This runs the real GeneratorAgent (no LLM — deterministic checks
+    only, so it's fast and needs no API keys) end-to-end against a
+    small fixed table with one planted issue per check
+    (null/duplicate/format-validity; outlier and prompt-injection stay
+    clean by design so their metrics are pinned at 100), then asserts
+    the exact scorecard values that dataset produces today. If a
+    future change to the Finding <-> scorer boundary alters any of
+    these numbers, this test fails and says so explicitly — it does
+    not require the old pre-refactor code to still exist to be useful
+    as a tripwire going forward."""
+    columns = [
+        ColumnSchema(name="email", type=ColumnType.STRING, nullable=False, semantic_hint="email"),
+        ColumnSchema(name="amount", type=ColumnType.INTEGER, nullable=True),
+    ]
+    rows = [
+        {"email": "a@example.com", "amount": 100},
+        {"email": "", "amount": 200},                      # null check -> row 1
+        {"email": "a@example.com", "amount": 100},          # duplicate of row 0 -> rows 0,2
+        {"email": "not-an-email", "amount": 150},           # format validity -> row 3
+        {"email": "d@example.com", "amount": 9999999},      # deliberately not flagged as outlier
+    ]
+    table = CanonicalTable(
+        tenant_id="t", source_id="s", table_name="frozen_baseline", columns=columns, rows=rows,
+    )
+
+    scan = GeneratorAgent().run(table)
+    assert scan.flagged_row_indices == [0, 1, 2, 3]
+
+    card = compute_scorecard(scan, table)
+    assert card.overall_score == 76.0
+
+    by_metric = {m.metric.value: m for m in card.metric_scores}
+    assert by_metric["completeness"].score == 60.0
+    assert by_metric["uniqueness"].score == 60.0
+    assert by_metric["validity"].score == 60.0
+    assert by_metric["consistency"].score == 100.0
+    assert by_metric["accuracy"].score == 100.0

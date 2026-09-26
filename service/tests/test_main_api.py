@@ -1,7 +1,10 @@
 import io
+import tempfile
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from app import main as app_main
 from app.main import app
 
 client = TestClient(app)
@@ -75,6 +78,43 @@ def test_scan_endpoint_with_related_file_enables_referential_integrity(monkeypat
     assert 1 in flagged_indices
     reasons = next(r for r in body["flagged_rows"] if r["row_index"] == 1)["deterministic_reasons"]
     assert any("referential_integrity_check" in r for r in reasons)
+
+
+def test_multi_file_scan_request_leaves_no_temp_files_behind(monkeypatch):
+    """Regression test for the temp-file leak in `_table_from_upload`:
+    every upload (primary + related) is written to a
+    `NamedTemporaryFile` and must be unlinked in the `finally` block
+    regardless of outcome. This wraps `tempfile.NamedTemporaryFile` as
+    called from app.main, records every path it hands back across a
+    multi-file /scans request, and asserts none of them survive the
+    request — catching a reintroduced leak, not just re-testing that
+    the endpoint returns 200."""
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    created_paths: list[str] = []
+    real_named_temp_file = tempfile.NamedTemporaryFile
+
+    def _tracking_named_temp_file(*args, **kwargs):
+        tmp = real_named_temp_file(*args, **kwargs)
+        created_paths.append(tmp.name)
+        return tmp
+
+    monkeypatch.setattr(app_main.tempfile, "NamedTemporaryFile", _tracking_named_temp_file)
+
+    accounts_csv = _csv_bytes(["id", "name"], [["1", "Acme"], ["2", "Globex"]])
+    leads_csv = _csv_bytes(["email", "account_id"], [["a@example.com", "1"]])
+
+    resp = client.post(
+        "/scans",
+        files=[
+            ("file", ("leads.csv", io.BytesIO(leads_csv), "text/csv")),
+            ("related_files", ("accounts.csv", io.BytesIO(accounts_csv), "text/csv")),
+        ],
+    )
+    assert resp.status_code == 200
+    assert len(created_paths) == 2  # one temp file per uploaded file
+    assert all(not Path(p).exists() for p in created_paths)
 
 
 def test_scan_endpoint_ignores_custom_instruction_without_api_keys(monkeypatch):

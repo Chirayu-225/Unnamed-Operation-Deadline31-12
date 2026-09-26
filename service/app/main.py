@@ -29,8 +29,14 @@ from app.agent.cross_table_reasoning import (
 )
 from app.agent.cost_estimate import ScanCostEstimate, estimate_scan_cost
 from app.agent.generator import GeneratorAgent
-from app.domain.calibration import calibrate
-from app.version import CROSS_TABLE_PROMPT_VERSION, DETECTION_VERSION, SCORING_VERSION, SEMANTIC_PROMPT_VERSION
+from app.domain.confidence import derive_confidence
+from app.version import (
+    CONFIDENCE_DERIVATION_VERSION,
+    CROSS_TABLE_PROMPT_VERSION,
+    DETECTION_VERSION,
+    SCORING_VERSION,
+    SEMANTIC_PROMPT_VERSION,
+)
 from app.canonical.models import CanonicalTable, ScanContext
 from app.checks.referential_integrity import _FK_SUFFIX, _PK_COLUMN, _related_table_name
 from app.config import ConfigError, gemini_api_key, groq_api_key
@@ -152,10 +158,10 @@ class FlaggedRowOut(BaseModel):
     verification_notes: str | None = None
     # A second, independently-derived confidence figure for the
     # semantic flag, alongside the raw self-reported one above — see
-    # app/domain/calibration.py for why the raw number alone isn't
+    # app/domain/confidence.py for why the raw number alone isn't
     # trustworthy as a probability. None when there's no semantic flag
-    # on this row at all (nothing to calibrate).
-    calibrated_confidence: float | None = None
+    # on this row at all (nothing to derive it from).
+    derived_confidence: float | None = None
 
 
 class ScanResponse(BaseModel):
@@ -221,6 +227,7 @@ def _current_versions(llm, verifier_llm) -> dict[str, str]:
     versions = {
         "detection_version": DETECTION_VERSION,
         "scoring_version": SCORING_VERSION,
+        "confidence_derivation_version": CONFIDENCE_DERIVATION_VERSION,
     }
     if llm is not None:
         versions["semantic_prompt_version"] = SEMANTIC_PROMPT_VERSION
@@ -292,8 +299,8 @@ def _run_table_scan(
                 semantic_confidence=sem.confidence if sem else None,
                 verification_label=ver.label.value if ver else None,
                 verification_notes=ver.verifier_notes if ver else None,
-                calibrated_confidence=(
-                    calibrate(
+                derived_confidence=(
+                    derive_confidence(
                         "semantic_single_table",
                         ver.label.value if ver else None,
                         ver.verification_failed if ver else False,
@@ -457,9 +464,9 @@ class CrossTableSemanticFinding(BaseModel):
     confidence: float
     verification_label: str | None = None
     verification_notes: str | None = None
-    # See FlaggedRowOut.calibrated_confidence — same idea, cross-table
-    # variant (a lower base rate — see app/domain/calibration.py).
-    calibrated_confidence: float | None = None
+    # See FlaggedRowOut.derived_confidence — same idea, cross-table
+    # variant (a lower base rate — see app/domain/confidence.py).
+    derived_confidence: float | None = None
 
 
 class SchemaScanResponse(BaseModel):
@@ -666,7 +673,7 @@ async def run_schema_scan(
                         confidence=f.confidence,
                         verification_label=v.label.value if v else None,
                         verification_notes=v.verifier_notes if v else None,
-                        calibrated_confidence=calibrate(
+                        derived_confidence=derive_confidence(
                             "semantic_cross_table",
                             v.label.value if v else None,
                             v.verification_failed if v else False,

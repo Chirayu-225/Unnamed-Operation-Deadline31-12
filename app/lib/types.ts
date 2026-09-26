@@ -13,11 +13,12 @@ export interface FlaggedRowOut {
   semantic_confidence: number | null;
   verification_label: "confirmed" | "needs_review" | "rejected" | null;
   verification_notes: string | null;
-  /** A second, independently-derived confidence figure — NOT the raw
-   * self-reported number above, which the backend deliberately doesn't
-   * trust as a calibrated probability (see service/app/domain/
-   * calibration.py). null when there's no semantic flag on this row. */
-  calibrated_confidence: number | null;
+  /** A second confidence figure, derived from structural facts about
+   * how the flag was produced (see service/app/domain/confidence.py)
+   * rather than trusting the raw self-reported number above as a
+   * probability. This is a heuristic derivation, not statistical
+   * calibration — null when there's no semantic flag on this row. */
+  derived_confidence: number | null;
 }
 
 export interface CompilationOut {
@@ -36,6 +37,10 @@ export interface ScanResponse {
   llm_used: boolean;
   compilation: CompilationOut | null;
   warnings: string[];
+  /** Which detection/scoring/prompt logic produced this scorecard, and
+   * (when an LLM ran) which models — see service/app/version.py.
+   * Optional because older cached responses may not carry it. */
+  versions?: Record<string, string>;
 }
 
 /** A referential-integrity finding that genuinely spans two tables —
@@ -64,9 +69,9 @@ export interface CrossTableSemanticFinding {
   confidence: number;
   verification_label: "confirmed" | "needs_review" | "rejected" | null;
   verification_notes: string | null;
-  /** See FlaggedRowOut.calibrated_confidence — same idea, cross-table
+  /** See FlaggedRowOut.derived_confidence — same idea, cross-table
    * findings start from a lower base rate (two-hop reasoning). */
-  calibrated_confidence: number | null;
+  derived_confidence: number | null;
 }
 
 export interface SchemaScanResponse {
@@ -77,6 +82,31 @@ export interface SchemaScanResponse {
   total_tables: number;
   total_rows: number;
   llm_used: boolean;
+  warnings: string[];
+  /** See ScanResponse.versions — same idea, schema-wide. */
+  versions?: Record<string, string>;
+}
+
+/** Mirrors service/app/agent/cost_estimate.py's ScanCostEstimate —
+ * pure arithmetic, no LLM calls needed to produce this. */
+export interface ScanCostEstimate {
+  table_name: string;
+  total_rows: number;
+  batch_size: number;
+  estimated_llm_calls: number;
+  estimated_coverage_pct: number;
+  estimated_input_tokens: number;
+  estimated_cost_usd: number;
+  note: string;
+}
+
+/** Mirrors service/app/main.py's ScanEstimateResponse (the
+ * /scans/estimate endpoint). */
+export interface ScanEstimateResponse {
+  tables: ScanCostEstimate[];
+  total_estimated_llm_calls: number;
+  total_estimated_cost_usd: number;
+  llm_configured: boolean;
   warnings: string[];
 }
 

@@ -1,5 +1,5 @@
 """
-Confidence calibration — the raw, self-reported LLM confidence is NOT
+Derived confidence — the raw, self-reported LLM confidence is NOT
 treated as a trustworthy probability here. Concrete evidence for why:
 in a real run against this project's own eval data, four structurally
 different flagged rows (one obvious industry mismatch, three subtler
@@ -8,11 +8,21 @@ reporting the identical number regardless of case difficulty isn't
 calibrated, it's a canned value. Treating that as "95% likely to be a
 real issue" would be a false precision claim dressed up as a number.
 
-Rather than fit calibration against a large labeled dataset (this
-project doesn't have one, and manufacturing one would just be guessing
-in a different shape), `calibrate()` derives a confidence figure from
-OBSERVABLE, STRUCTURAL facts about how a flag was produced — hence
-"calibration via subtlety, not via the model's own confidence report":
+IMPORTANT NAMING NOTE (this module was originally called
+calibration.py, and the field it produces was originally named
+`calibrated_confidence` — both were renamed after a fair review
+comment): "confidence calibration" has a specific, established
+statistical meaning — measuring predicted confidence against empirical
+correctness (a reliability diagram, Expected Calibration Error) and
+adjusting for the gap. This module does NOT do that, and doesn't claim
+to. There is no labeled outcome dataset here to calibrate against, and
+building one is real, separate future work, not something to gesture
+at with a name that implies it already happened. What this module
+actually does is a heuristic, rule-based confidence DERIVATION from
+observable, structural facts about how a flag was produced — a
+different and much more modest thing than statistical calibration, and
+`derive_confidence()` / `derived_confidence` are named to say exactly
+that, no more:
 
 - `check_type` sets a base rate. A deterministic check is exact by
   construction (base 1.0, never adjusted — there's no "confidence" in
@@ -49,6 +59,13 @@ caught on the same row). That needs visibility across the WHOLE
 finding set at once, which is a natural next step for this module but
 a separate, larger change — left for a later pass rather than folded
 in here, so this one stays small enough to verify in isolation.
+
+Also still future work, and NOT what this module is: actual empirical
+calibration — plotting `derived_confidence` (or the raw self-reported
+number) against real labeled outcomes, computing a reliability diagram
+and ECE, and adjusting from there. That requires a labeled dataset this
+project doesn't have yet. Nothing here should be read as having done
+that work already.
 """
 
 from __future__ import annotations
@@ -57,11 +74,11 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Only for type-checking — importing app.domain.finding at runtime
-    # here would create a cycle (finding.py imports calibrate() below).
-    # CheckType/VerificationStatus are (str, Enum) subclasses, so a
-    # dict keyed on their plain string values (below) still matches a
-    # real enum member passed in at runtime: str-Enum equality AND
-    # hashing both fall through to the string value.
+    # here would create a cycle (finding.py imports derive_confidence()
+    # below). CheckType/VerificationStatus are (str, Enum) subclasses,
+    # so a dict keyed on their plain string values (below) still
+    # matches a real enum member passed in at runtime: str-Enum
+    # equality AND hashing both fall through to the string value.
     from app.domain.finding import CheckType, VerificationStatus
 
 _BASE_CONFIDENCE: dict[str, float] = {
@@ -81,7 +98,7 @@ _MIN_CONFIDENCE = 0.05
 _MAX_CONFIDENCE = 0.99
 
 
-def calibrate(
+def derive_confidence(
     check_type: "CheckType | str",
     verification_status: "VerificationStatus | str | None",
     verification_failed: bool = False,
@@ -95,7 +112,11 @@ def calibrate(
     Accepts either the real enum members or their plain string values
     — deliberately duck-typed, matching this codebase's existing
     convention for cross-module calls that would otherwise risk a
-    circular import (see finding.py's converters)."""
+    circular import (see finding.py's converters).
+
+    This is a heuristic derivation, not statistical calibration — see
+    the module docstring's naming note before reusing this name
+    elsewhere."""
     base = _BASE_CONFIDENCE.get(check_type, 0.5)  # type: ignore[arg-type]
 
     if check_type == "deterministic":

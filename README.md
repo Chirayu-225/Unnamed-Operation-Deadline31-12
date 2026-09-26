@@ -315,7 +315,7 @@ Next.js builds cleanly, including the real dashboard. Live demo scripts (real AP
 verified in advance): `scripts/check_llm_connectivity.py`, `scripts/semantic_reasoning_demo.py`,
 `scripts/full_pipeline_demo.py`, `scripts/rule_compiler_demo.py`,
 `scripts/custom_instruction_demo.py`, `scripts/full_scorecard_demo.py` (the complete
-pipeline — checks + semantic reasoning + verification + scoring together). `scripts/manual_test.py`
+pipeline — checks + semantic reasoning + verification + scoring together). `scripts/manual_run.py`
 now also prints a scorecard, with field-criticality weighting visible, computed with no API
 keys at all, since scoring is pure aggregation over already-run deterministic checks.
 
@@ -456,12 +456,23 @@ isolation — anyone who can reach the service can run a scan), and deployment
 hardening beyond the iteration cap (temperature control, red-team validation, cost
 caps) also remains paused.
 
-Note on the frontend's Next.js version: `npm install` currently reports
-next@14.2.34 as vulnerable to several disclosed advisories (the version was
-originally pinned for a December 2025 fix, but more have landed since — see
-`npm audit`). Not addressed in this pass since deployment is on hold anyway, but
-this needs a version bump and a rebuild/retest before this ever goes anywhere
-public.
+**Resolved — Next.js upgraded 14.2.34 -> 16.3.6 (React 18 -> 19):** `npm audit`
+was reporting next@14.2.34 vulnerable to a growing list of disclosed advisories.
+Checking Next.js's own security blog turned up something more serious than a
+routine patch bump: **the 14.x line has stopped receiving security fixes
+entirely** — only 15.5.x (Maintenance LTS) and 16.3.x (Active LTS) are patched,
+confirmed via the August 25 2026 and September 22 2026 security releases (the
+latter fixing a critical unauthenticated RCE in `next/og`'s `ImageResponse`,
+three days before this check). Staying on 14 wasn't a "needs a version bump
+eventually" note anymore — it was an unpatchable version. Upgraded straight to
+16.3.6 (skipping 15) since it's the actively-maintained line, which required
+React 18 -> 19 alongside it. Checked both API routes (`app/api/scan`,
+`app/api/health`) for Next 15's async-`params`/`cookies()`/`headers()` breaking
+change first — neither uses any of those, so the upgrade was a clean drop-in:
+`npm audit` now reports **0 vulnerabilities**, `next build` (now running on
+Turbopack by default) compiles clean with no type errors, and a production
+`next start` smoke test confirms `/`, `/eval`, and `/api/health` all still
+respond correctly.
 
 Groq model note: `GroqClient` defaults to `openai/gpt-oss-20b`, picked because it's
 what this account's key actually has access to and it fits the generator's
@@ -513,7 +524,7 @@ cd service
 pip install -r requirements.txt
 PYTHONPATH=. pytest          # should show 113 passed
 PYTHONPATH=. uvicorn app.main:app --reload --port 8000
-PYTHONPATH=. python3 scripts/manual_test.py
+PYTHONPATH=. python3 scripts/manual_run.py
 ```
 
 **Python service (Windows, cmd.exe):**
@@ -523,7 +534,7 @@ pip install -r requirements.txt
 set PYTHONPATH=.
 pytest
 uvicorn app.main:app --reload --port 8000
-python scripts\manual_test.py
+python scripts\manual_run.py
 ```
 
 **Python service (Windows, PowerShell):**
@@ -533,7 +544,7 @@ pip install -r requirements.txt
 $env:PYTHONPATH = "."
 pytest
 uvicorn app.main:app --reload --port 8000
-python scripts\manual_test.py
+python scripts\manual_run.py
 ```
 
 Important: you must run these from the `service\` folder itself (not `scripts\`) —
@@ -556,11 +567,9 @@ no API keys set (deterministic-only, with a warning banner) or with them set
 (full semantic reasoning + verification + custom instructions).
 
 Note: `node_modules/` and `.next/` are not included (run `npm install` fresh) — but
-`package-lock.json` is included for reproducible installs. Next.js is currently
-pinned to `14.2.34`; `npm audit` now reports it vulnerable to several disclosed
-advisories beyond the December 2025 one it was originally pinned for — see the
-note earlier in this file. Needs a version bump before deployment, not addressed
-this pass since deployment itself is on hold.
+`package-lock.json` is included for reproducible installs. Next.js is pinned to
+`16.3.6` (React 19) — see the note earlier in this file for why the 14.x line
+had to be abandoned rather than patched. `npm audit` is clean (0 vulnerabilities).
 
 ## Running the agentic evaluation
 

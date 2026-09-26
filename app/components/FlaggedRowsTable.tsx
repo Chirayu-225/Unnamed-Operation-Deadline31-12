@@ -325,13 +325,13 @@ export function FlaggedRowsTable({ rows }: { rows: FlaggedRowOut[] }) {
                           </span>
                         )}
                       </div>
-                      {row.calibrated_confidence !== null && (
+                      {row.derived_confidence !== null && (
                         <div
                           className="tabular"
                           style={{ fontSize: "0.8125rem", color: "var(--text-secondary)", marginTop: "0.15rem" }}
-                          title="Derived from how this flag was produced and verified, not from the model's own self-reported number — see the calibration note in the API response."
+                          title="Derived from how this flag was produced and verified, not from the model's own self-reported number — see the derivation note in the API response."
                         >
-                          Calibrated confidence: {row.calibrated_confidence.toFixed(2)}
+                          Derived confidence: {row.derived_confidence.toFixed(2)}
                         </div>
                       )}
                       <div style={{ marginTop: "0.2rem" }}>

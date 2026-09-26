@@ -1,7 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { FileTrigger } from "./FileTrigger";
+import { EstimatePreview, PreflightState } from "./EstimatePreview";
 
 interface Props {
   onSubmit: (formData: FormData) => void;
@@ -16,6 +17,42 @@ export function ScanForm({ onSubmit, loading }: Props) {
   const [instruction, setInstruction] = useState("");
   const [instructionMode, setInstructionMode] = useState<InstructionMode>("type");
   const [instructionFile, setInstructionFile] = useState<File | null>(null);
+  const [preflight, setPreflight] = useState<PreflightState>({ status: "idle" });
+
+  // Fires the moment a file is picked, not on a separate button — the
+  // whole point of a preflight is to show cost/coverage BEFORE the user
+  // commits, so gating it behind another click just adds friction the
+  // backend's own cost_estimate.py docstring doesn't ask for. Guarded
+  // with AbortController against the standard React race: swap files
+  // twice quickly and the FIRST file's response landing after the
+  // SECOND file's request would otherwise overwrite the correct state
+  // with a stale one — the abort in cleanup prevents exactly that.
+  useEffect(() => {
+    if (!primaryFile) {
+      setPreflight({ status: "idle" });
+      return;
+    }
+    const controller = new AbortController();
+    setPreflight({ status: "loading" });
+
+    const formData = new FormData();
+    formData.append("files", primaryFile);
+    if (relatedFile) formData.append("files", relatedFile);
+
+    fetch("/api/scan-estimate", { method: "POST", body: formData, signal: controller.signal })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || data.error || `Estimate failed (HTTP ${res.status})`);
+        return data;
+      })
+      .then((data) => setPreflight({ status: "ready", estimate: data }))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === "AbortError") return; // superseded, not a real failure
+        setPreflight({ status: "error", message: err instanceof Error ? err.message : String(err) });
+      });
+
+    return () => controller.abort();
+  }, [primaryFile, relatedFile]);
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -67,6 +104,8 @@ export function ScanForm({ onSubmit, loading }: Props) {
         accept=".csv"
         onChange={setRelatedFile}
       />
+
+      <EstimatePreview state={preflight} />
 
       <div>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.4rem" }}>
@@ -122,7 +161,12 @@ export function ScanForm({ onSubmit, loading }: Props) {
         )}
       </div>
 
-      <button type="submit" className="btn-primary" disabled={!primaryFile || loading} style={{ padding: "0.65rem 1rem", marginTop: "0.25rem" }}>
+      <button
+        type="submit"
+        className="btn-primary"
+        disabled={!primaryFile || loading || preflight.status === "loading"}
+        style={{ padding: "0.65rem 1rem", marginTop: "0.25rem" }}
+      >
         {loading ? "Running scan..." : "Run scan"}
       </button>
     </form>

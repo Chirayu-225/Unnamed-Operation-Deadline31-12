@@ -79,7 +79,7 @@ class VerifiedFlag(BaseModel):
     # failing or returning nothing usable — as opposed to a genuine
     # NEEDS_REVIEW where the verifier ran and was honestly uncertain.
     # Both used to be indistinguishable beyond a free-text note; see
-    # app/domain/calibration.py for why that distinction matters.
+    # app/domain/confidence.py for why that distinction matters.
     verification_failed: bool = False
 
 

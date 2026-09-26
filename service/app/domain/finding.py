@@ -45,7 +45,7 @@ from typing import Any, Optional, Sequence
 from pydantic import BaseModel
 
 from app.checks.base import CheckResult, MetricCategory
-from app.domain.calibration import calibrate
+from app.domain.confidence import derive_confidence
 
 
 class CheckType(str, Enum):
@@ -112,16 +112,16 @@ class Finding(BaseModel):
     severity: Severity
     confidence: float
     # A second, independently-derived confidence figure — see
-    # app/domain/calibration.py. `confidence` above stays the raw,
+    # app/domain/confidence.py. `confidence` above stays the raw,
     # self-reported number from whichever layer produced this Finding
     # (1.0 for deterministic checks, the generator's own claim for
-    # semantic ones); `calibrated_confidence` is this module's own
+    # semantic ones); `derived_confidence` is this module's own
     # estimate, built from structural facts rather than trusting that
     # raw number. Deliberately NOT wired into `severity` this pass —
     # severity keeps deriving from the raw confidence, unchanged, so
     # this stays a purely additive signal rather than touching anything
     # already proven behavior-preserving (see scorer.py).
-    calibrated_confidence: float
+    derived_confidence: float
     evidence: dict[str, Any] | None = None
     explanation: str
     verification_status: VerificationStatus | None = None
@@ -188,7 +188,7 @@ def findings_from_check_result(
                 affected_fields=fields,
                 severity=_deterministic_severity(fields, nullable_by_field),
                 confidence=1.0,
-                calibrated_confidence=calibrate(CheckType.DETERMINISTIC.value, None),
+                derived_confidence=derive_confidence(CheckType.DETERMINISTIC.value, None),
                 explanation=check_result.detail,
                 verification_status=None,
                 source=check_result.check_name,
@@ -246,7 +246,7 @@ def findings_from_semantic_flags(
                 affected_fields=[],
                 severity=_semantic_severity(flag.confidence, verification_status),
                 confidence=flag.confidence,
-                calibrated_confidence=calibrate(
+                derived_confidence=derive_confidence(
                     CheckType.SEMANTIC_SINGLE_TABLE.value,
                     verification_status.value if verification_status else None,
                     verification_failed,
@@ -294,7 +294,7 @@ def findings_from_cross_table_semantic(cross_table_findings: list) -> list[Findi
                 affected_fields=[f.fk_column],
                 severity=_semantic_severity(f.confidence, verification_status),
                 confidence=f.confidence,
-                calibrated_confidence=calibrate(
+                derived_confidence=derive_confidence(
                     CheckType.SEMANTIC_CROSS_TABLE.value,
                     verification_status.value if verification_status else None,
                     verification_failed,

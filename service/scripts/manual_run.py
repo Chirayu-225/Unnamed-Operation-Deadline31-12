@@ -5,7 +5,7 @@ ScanContext from both, then run all five deterministic checks. This is
 meant to be read while you run it, not just executed for a pass/fail.
 
 Run from dbcaas/service:
-    PYTHONPATH=. python3 scripts/manual_test.py
+    PYTHONPATH=. python3 scripts/manual_run.py
 """
 
 from pathlib import Path

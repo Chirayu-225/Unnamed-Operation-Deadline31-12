@@ -8,6 +8,7 @@ import { CoverageBadge } from "../components/CoverageBadge";
 import { CrossTableFindings } from "../components/CrossTableFindings";
 import { CrossTableSemanticFindings } from "../components/CrossTableSemanticFindings";
 import { FlaggedRowsTable } from "../components/FlaggedRowsTable";
+import { VersionFootnote } from "../components/VersionFootnote";
 import { SchemaScanResponse } from "../lib/types";
 
 export default function SchemaScanPage() {
@@ -218,6 +219,8 @@ export default function SchemaScanPage() {
               })}
             </div>
           </div>
+
+          <VersionFootnote versions={result.versions} />
         </section>
       )}
     </main>

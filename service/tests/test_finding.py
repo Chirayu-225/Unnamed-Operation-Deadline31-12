@@ -168,28 +168,28 @@ def test_cross_table_finding_id_is_order_independent_for_row_pair():
     assert id_a == id_b
 
 
-# --- calibrated_confidence is populated, independently of `confidence` -----
+# --- derived_confidence is populated, independently of `confidence` -----
 
-def test_deterministic_finding_calibrated_confidence_is_full():
+def test_deterministic_finding_derived_confidence_is_full():
     check_result = CheckResult(
         check_name="duplicate_check", metric=MetricCategory.UNIQUENESS,
         flagged_row_indices=[0], total_rows_evaluated=1, detail="d", flagged_fields={},
     )
     finding = findings_from_check_result(check_result, "t", {})[0]
-    assert finding.calibrated_confidence == 1.0
+    assert finding.derived_confidence == 1.0
 
 
-def test_confirmed_semantic_finding_calibrated_confidence_ignores_raw_confidence():
+def test_confirmed_semantic_finding_derived_confidence_ignores_raw_confidence():
     """The generator's raw confidence (0.5 here) shouldn't drive the
-    calibrated figure at all — a genuine CONFIRMED from the verifier is
-    what raises it, per app/domain/calibration.py."""
+    derived figure at all — a genuine CONFIRMED from the verifier is
+    what raises it, per app/domain/confidence.py."""
     flags = [_FakeSemanticFlag(0, "mismatch", 0.5)]
     verified_by_row = {0: _FakeVerifiedFlag(0, _FakeLabel("confirmed"))}
     finding = findings_from_semantic_flags(flags, verified_by_row, "leads")[0]
-    assert finding.calibrated_confidence > 0.5  # calibration overrode the low raw confidence
+    assert finding.derived_confidence > 0.5  # derivation overrode the low raw confidence
 
 
-def test_technical_verification_failure_lowers_calibrated_confidence_vs_unverified():
+def test_technical_verification_failure_lowers_derived_confidence_vs_unverified():
     class _FakeFailedVerifiedFlag(_FakeVerifiedFlag):
         def __init__(self, row_index, label):
             super().__init__(row_index, label)
@@ -200,14 +200,14 @@ def test_technical_verification_failure_lowers_calibrated_confidence_vs_unverifi
     failed = findings_from_semantic_flags(
         flags, {0: _FakeFailedVerifiedFlag(0, _FakeLabel("needs_review"))}, "leads"
     )[0]
-    assert failed.calibrated_confidence < unverified.calibrated_confidence
+    assert failed.derived_confidence < unverified.derived_confidence
 
 
-def test_cross_table_finding_calibrated_confidence_starts_lower_than_single_table():
+def test_cross_table_finding_derived_confidence_starts_lower_than_single_table():
     ctf = _FakeCrossTableFinding("contacts", 0, "accounts", 5, "account_id", "r", 0.9)
     cross_table = findings_from_cross_table_semantic([ctf])[0]
 
     flags = [_FakeSemanticFlag(0, "r", 0.9)]
     single_table = findings_from_semantic_flags(flags, {}, "leads")[0]
 
-    assert cross_table.calibrated_confidence < single_table.calibrated_confidence
+    assert cross_table.derived_confidence < single_table.derived_confidence

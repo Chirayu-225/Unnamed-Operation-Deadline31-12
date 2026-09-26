@@ -7,6 +7,7 @@ import { MetricMeter } from "./components/MetricMeter";
 import { FlaggedRowsTable } from "./components/FlaggedRowsTable";
 import { StatTile } from "./components/StatTile";
 import { CoverageBadge } from "./components/CoverageBadge";
+import { VersionFootnote } from "./components/VersionFootnote";
 import { ScanResponse } from "./lib/types";
 
 export default function Home() {
@@ -142,6 +143,8 @@ export default function Home() {
             </h2>
             <FlaggedRowsTable rows={result.flagged_rows} />
           </div>
+
+          <VersionFootnote versions={result.versions} />
         </section>
       )}
     </main>

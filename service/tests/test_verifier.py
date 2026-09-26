@@ -138,8 +138,8 @@ def test_fails_safe_to_needs_review_when_row_missing_from_response():
 def test_genuine_needs_review_is_not_marked_as_a_technical_failure():
     """The verifier ran, parsed cleanly, and deliberately returned
     "needs_review" as its considered judgment — this must NOT be
-    conflated with a call failure, since app.domain.calibration treats
-    the two very differently (see test_calibration.py)."""
+    conflated with a call failure, since app.domain.confidence treats
+    the two very differently (see test_confidence_derivation.py)."""
     llm = _FakeLLM(
         '{"verifications": [{"row_index": 1, "label": "needs_review", "notes": "unclear"}]}'
     )
@@ -212,7 +212,7 @@ def test_one_chunk_failing_every_retry_does_not_affect_other_chunks(monkeypatch)
     # This is the exact path that let a real quota-exhaustion error
     # mid-scan masquerade as a genuine "verifier looked and was
     # uncertain" NEEDS_REVIEW — verification_failed=True is what lets
-    # app.domain.calibration tell the two apart.
+    # app.domain.confidence tell the two apart.
     assert result_by_index[poison_row].verification_failed is True
     assert result_by_index[20].label == VerificationLabel.NEEDS_REVIEW
     assert result_by_index[20].verification_failed is True

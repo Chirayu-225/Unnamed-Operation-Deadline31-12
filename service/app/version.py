@@ -25,3 +25,10 @@ DETECTION_VERSION = "1.1.0"  # bumped for the Finding-model refactor
 SEMANTIC_PROMPT_VERSION = "2.0.0"  # anti-manipulation hardening + membership check
 CROSS_TABLE_PROMPT_VERSION = "2.0.0"  # same hardening, cross-table variant
 SCORING_VERSION = "1.1.0"  # Finding-based internals; numeric output unchanged
+CONFIDENCE_DERIVATION_VERSION = "1.0.0"  # app/domain/confidence.py's base
+# rates + confirmed-boost/technical-failure-penalty constants. Bump
+# this whenever any of those numbers change — it's the one piece of
+# scan-response metadata that ISN'T also covered by DETECTION_VERSION,
+# since derive_confidence() is called after Finding conversion, not
+# part of it, and a change to its constants alone wouldn't otherwise
+# be visible in the versions a scan response carries.

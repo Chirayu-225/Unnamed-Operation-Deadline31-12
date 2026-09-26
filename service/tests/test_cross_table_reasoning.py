@@ -168,7 +168,7 @@ def test_verifier_confirms_rejects_and_defaults_to_needs_review():
     assert by_key[(0, 0)].label == CrossTableVerificationLabel.NEEDS_REVIEW
     # The LLM responded (just without this pair) — a parsed-but-incomplete
     # response, same bucket as "ran and returned nothing about this," not
-    # a call failure — see app/domain/calibration.py.
+    # a call failure — see app/domain/confidence.py.
     assert by_key[(0, 0)].verification_failed is True
 
 
