@@ -1,0 +1,7 @@
+email,amount,signup_date,account_id
+alice@example.com,120,2026-01-05,1
+,-40,2026-01-06,2
+bob@example.com,80,2026-01-07,99
+alice@example.com,120,2026-01-05,1
+not-an-email,60,2026-01-08,2
+carol@example.com,100000,2026-01-09,3

@@ -1,0 +1,250 @@
+import pytest
+
+from app.agent.llm_clients import LLMClient, LLMRequestTooLargeError
+from app.agent.semantic_reasoning import _MIN_SAMPLE_SIZE, SemanticReasoner
+from app.canonical.models import CanonicalTable, ColumnSchema, ColumnType
+
+
+class _FakeLLM(LLMClient):
+    """Returns a canned response instead of calling a real API — lets
+    us test parsing and integration without any network access or
+    real keys."""
+
+    def __init__(self, canned_response: str):
+        self.canned_response = canned_response
+        self.last_system_prompt: str | None = None
+        self.last_user_prompt: str | None = None
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        self.last_system_prompt = system_prompt
+        self.last_user_prompt = user_prompt
+        return self.canned_response
+
+
+class _FakeStatusError(Exception):
+    """Stands in for a real SDK exception (e.g. groq.APIStatusError) —
+    only `.status_code` matters to the code under test."""
+
+    def __init__(self, message: str, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class _TooLargeUntilSmallLLM(LLMClient):
+    """Fails with a 413 for any batch bigger than `max_rows_ok`,
+    succeeds otherwise — used to test SemanticReasoner's
+    shrink-then-resubmit behavior without a real provider."""
+
+    def __init__(self, max_rows_ok: int):
+        self.max_rows_ok = max_rows_ok
+        self.rows_per_call: list[int] = []  # how many rows each call actually sent
+
+    def complete(self, system_prompt: str, user_prompt: str) -> str:
+        rows_in_prompt = user_prompt.count("] row ")
+        self.rows_per_call.append(rows_in_prompt)
+        if rows_in_prompt > self.max_rows_ok:
+            raise _FakeStatusError("Request too large", status_code=413)
+        return '{"flags": []}'
+
+
+def _table() -> CanonicalTable:
+    return CanonicalTable(
+        tenant_id="t",
+        source_id="s",
+        table_name="leads",
+        columns=[
+            ColumnSchema(name="company", type=ColumnType.STRING),
+            ColumnSchema(name="industry", type=ColumnType.STRING),
+        ],
+        rows=[
+            {"company": "Acme Corp", "industry": "Technology"},
+            {"company": "Joe's Bakery", "industry": "Technology"},  # semantically odd
+        ],
+    )
+
+
+def test_parses_well_formed_json_response():
+    llm = _FakeLLM(
+        '{"flags": [{"row_index": 1, "reason": "bakery listed as tech", "confidence": 0.8}]}'
+    )
+    result = SemanticReasoner(llm).run(_table())
+    assert len(result.flags) == 1
+    assert result.flags[0].row_index == 1
+    assert result.flags[0].confidence == 0.8
+
+
+def test_handles_markdown_fenced_json():
+    llm = _FakeLLM('```json\n{"flags": [{"row_index": 1, "reason": "x", "confidence": 0.5}]}\n```')
+    result = SemanticReasoner(llm).run(_table())
+    assert len(result.flags) == 1
+
+
+def test_empty_flags_when_nothing_wrong():
+    llm = _FakeLLM('{"flags": []}')
+    result = SemanticReasoner(llm).run(_table())
+    assert result.flags == []
+
+
+def test_fails_safe_on_malformed_json():
+    llm = _FakeLLM("this is not json at all, sorry")
+    result = SemanticReasoner(llm).run(_table())
+    assert result.flags == []  # no crash, just no flags
+
+
+def test_fails_safe_on_missing_required_fields():
+    llm = _FakeLLM('{"flags": [{"row_index": 1}]}')  # missing "reason"
+    result = SemanticReasoner(llm).run(_table())
+    assert result.flags == []
+
+
+def test_row_data_is_framed_as_untrusted_in_prompt():
+    """Guards the prompt-injection mitigation — this should never
+    silently regress into treating row data as trusted."""
+    llm = _FakeLLM('{"flags": []}')
+    SemanticReasoner(llm).run(_table())
+    assert "UNTRUSTED DATA" in llm.last_user_prompt
+    assert "never instructions" in llm.last_system_prompt.lower() or "untrusted" in llm.last_system_prompt.lower()
+
+
+def test_custom_instruction_is_included_when_provided():
+    llm = _FakeLLM('{"flags": []}')
+    SemanticReasoner(llm).run(_table(), custom_instruction="flag any joke company names")
+    assert "flag any joke company names" in llm.last_user_prompt
+
+
+def test_sample_size_limits_rows_sent():
+    big_table = CanonicalTable(
+        tenant_id="t",
+        source_id="s",
+        table_name="big",
+        columns=[ColumnSchema(name="x", type=ColumnType.STRING)],
+        rows=[{"x": str(i)} for i in range(100)],
+    )
+    llm = _FakeLLM('{"flags": []}')
+    result = SemanticReasoner(llm, sample_size=10).run(big_table)
+    assert result.rows_sampled == 10
+
+
+def test_sampled_indices_matches_the_rows_actually_sent():
+    """Sampling is random (see the "random, not sequential" note on
+    `run()`), so this checks that exactly one VALID row index came
+    back — not which one — across enough repeats to catch a
+    regression back to "always row 0"."""
+    llm = _FakeLLM('{"flags": []}')
+    seen_indices = set()
+    for _ in range(30):
+        result = SemanticReasoner(llm, sample_size=1).run(_table())
+        assert len(result.sampled_indices) == 1
+        assert result.sampled_indices[0] in (0, 1)
+        seen_indices.add(result.sampled_indices[0])
+    # With 30 draws from {0, 1}, both should show up if sampling is
+    # genuinely random rather than a fixed "always row 0".
+    assert seen_indices == {0, 1}
+
+
+def test_exclude_indices_skips_already_sampled_rows():
+    """This is what makes the iteration loop's 'fresh batch' behavior
+    possible — a repeat call with the previous cycle's indices
+    excluded must not resample them."""
+    big_table = CanonicalTable(
+        tenant_id="t",
+        source_id="s",
+        table_name="big",
+        columns=[ColumnSchema(name="x", type=ColumnType.STRING)],
+        rows=[{"x": str(i)} for i in range(5)],
+    )
+    llm = _FakeLLM('{"flags": []}')
+    result = SemanticReasoner(llm, sample_size=3).run(big_table, exclude_indices={0, 1, 2})
+    assert result.sampled_indices == [3, 4]
+    assert result.rows_sampled == 2
+
+
+def test_exclude_indices_can_exhaust_the_table():
+    llm = _FakeLLM('{"flags": []}')
+    result = SemanticReasoner(llm).run(_table(), exclude_indices={0, 1})
+    assert result.rows_sampled == 0
+    assert result.sampled_indices == []
+
+
+def _big_table(n: int) -> CanonicalTable:
+    return CanonicalTable(
+        tenant_id="t",
+        source_id="s",
+        table_name="big",
+        columns=[ColumnSchema(name="x", type=ColumnType.STRING)],
+        rows=[{"x": str(i)} for i in range(n)],
+    )
+
+
+def test_shrinks_batch_on_413_until_it_succeeds():
+    """A batch too large for one request should be halved and
+    resubmitted — not retried unchanged, and not given up on — until
+    it fits, and the reasoner should remember the size that worked for
+    later batches in the same scan."""
+    llm = _TooLargeUntilSmallLLM(max_rows_ok=20)
+    reasoner = SemanticReasoner(llm, sample_size=100)
+
+    result = reasoner.run(_big_table(100))
+
+    assert result.rows_sampled <= 20  # ended up at or under the size that actually works
+    assert len(llm.rows_per_call) > 1  # it actually shrank and retried, not one-shot
+    assert llm.rows_per_call[0] == 100  # first attempt was the full requested size
+    assert llm.rows_per_call[-1] == result.rows_sampled  # last attempt is what succeeded
+    # Persisted for next time — a later batch in the same scan won't
+    # have to rediscover the same 413 from scratch.
+    assert reasoner.sample_size == result.rows_sampled
+
+
+def test_gives_up_when_even_the_floor_size_is_too_large():
+    """If shrinking all the way down to _MIN_SAMPLE_SIZE still gets
+    rejected as too large, that's a genuinely different problem
+    (e.g. one row's own content is huge) that shrinking further can't
+    fix — this should propagate as LLMRequestTooLargeError rather than
+    loop forever or silently return nothing."""
+    llm = _TooLargeUntilSmallLLM(max_rows_ok=1)  # even the floor size is too big
+    reasoner = SemanticReasoner(llm, sample_size=100)
+
+    with pytest.raises(LLMRequestTooLargeError):
+        reasoner.run(_big_table(100))
+
+    # It should have actually shrunk all the way down before giving up,
+    # not failed immediately on the first attempt.
+    assert min(llm.rows_per_call) == _MIN_SAMPLE_SIZE
+
+
+def test_normal_batch_within_limit_is_unaffected():
+    """A batch that never hits a 413 should behave exactly as before —
+    one call, no shrinking, sample_size unchanged."""
+    llm = _TooLargeUntilSmallLLM(max_rows_ok=50)
+    reasoner = SemanticReasoner(llm, sample_size=20)
+
+    result = reasoner.run(_big_table(100))
+
+    assert result.rows_sampled == 20
+    assert len(llm.rows_per_call) == 1
+    assert reasoner.sample_size == 20
+
+
+def test_drops_a_flag_for_a_row_index_not_actually_in_this_batch():
+    """A hallucinated or (adversarially) injected row_index that was
+    never part of this batch's sample must never make it into the
+    result — sample_size=1 makes the shown set deterministic (row 0
+    or row 1, never both), so any OTHER index in the canned response
+    is provably not something this batch actually sent."""
+    llm = _FakeLLM('{"flags": [{"row_index": 0, "reason": "x", "confidence": 0.9}, '
+                   '{"row_index": 1, "reason": "y", "confidence": 0.9}]}')
+    result = SemanticReasoner(llm, sample_size=1).run(_table())
+    assert len(result.sampled_indices) == 1
+    shown = result.sampled_indices[0]
+    # Only the flag matching the row actually shown survives — the
+    # other one (for the row NOT sent this batch) is dropped.
+    assert [f.row_index for f in result.flags] == [shown]
+
+
+def test_drops_a_flag_for_a_row_index_outside_the_table_entirely():
+    """Same protection against a fabricated out-of-range index (e.g. a
+    row-content-injection payload shaped like {"row_index": 999, ...})
+    — not just a real row that merely wasn't in this batch."""
+    llm = _FakeLLM('{"flags": [{"row_index": 999, "reason": "fake", "confidence": 1.0}]}')
+    result = SemanticReasoner(llm, sample_size=2).run(_table())
+    assert result.flags == []

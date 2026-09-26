@@ -1,0 +1,151 @@
+id,customer_id,confirmation_email,product_name,product_category,amount,order_date
+0,1,order0@buyer0.com,Wireless Gadget Model 0,Electronics,20,2026-02-10
+1,2,order1@buyer1.com,Wireless Gadget Model 1,Electronics,33,2026-02-10
+2,3,order2@buyer2.com,Wireless Gadget Model 2,Electronics,46,2026-02-10
+3,4,order3@buyer3.com,Wireless Gadget Model 3,Electronics,59,2026-02-10
+4,5,order4@buyer4.com,Wireless Gadget Model 4,Electronics,72,2026-02-10
+5,6,order5@buyer5.com,Wireless Gadget Model 5,Electronics,85,2026-02-10
+6,7,order6@buyer6.com,Wireless Gadget Model 6,Electronics,98,2026-02-10
+7,8,order7@buyer7.com,Wireless Gadget Model 7,Electronics,111,2026-02-10
+8,9,order8@buyer8.com,Wireless Gadget Model 8,Electronics,124,2026-02-10
+9,10,order9@buyer9.com,Wireless Gadget Model 9,Electronics,137,2026-02-10
+10,11,order10@buyer10.com,Wireless Gadget Model 10,Electronics,150,2026-02-10
+11,12,order11@buyer11.com,Wireless Gadget Model 11,Electronics,163,2026-02-10
+12,13,order12@buyer12.com,Wireless Gadget Model 12,Electronics,176,2026-02-10
+13,14,order13@buyer13.com,Wireless Gadget Model 13,Electronics,189,2026-02-10
+14,15,order14@buyer14.com,Wireless Gadget Model 14,Electronics,202,2026-02-10
+15,16,order15@buyer15.com,Wireless Gadget Model 15,Electronics,215,2026-02-10
+16,17,order16@buyer16.com,Wireless Gadget Model 16,Electronics,228,2026-02-10
+17,18,order17@buyer17.com,Wireless Gadget Model 17,Electronics,241,2026-02-10
+18,19,order18@buyer18.com,Wireless Gadget Model 18,Electronics,254,2026-02-10
+19,20,order19@buyer19.com,Wireless Gadget Model 19,Electronics,267,2026-02-10
+20,21,order20@buyer20.com,Wireless Gadget Model 0,Electronics,280,2026-02-10
+21,22,order21@buyer21.com,Wireless Gadget Model 1,Electronics,293,2026-02-10
+22,23,order22@buyer22.com,Wireless Gadget Model 2,Electronics,306,2026-02-10
+23,24,order23@buyer23.com,Wireless Gadget Model 3,Electronics,319,2026-02-10
+24,25,order24@buyer24.com,Wireless Gadget Model 4,Electronics,332,2026-02-10
+25,26,order25@buyer25.com,Wireless Gadget Model 5,Electronics,345,2026-02-10
+26,27,order26@buyer26.com,Wireless Gadget Model 6,Electronics,358,2026-02-10
+27,28,order27@buyer27.com,Wireless Gadget Model 7,Electronics,371,2026-02-10
+28,29,order28@buyer28.com,Wireless Gadget Model 8,Electronics,384,2026-02-10
+29,30,order29@buyer29.com,Wireless Gadget Model 9,Electronics,397,2026-02-10
+30,31,order30@buyer30.com,Wireless Gadget Model 10,Electronics,410,2026-02-10
+31,32,order31@buyer31.com,Wireless Gadget Model 11,Electronics,423,2026-02-10
+32,33,order32@buyer32.com,Wireless Gadget Model 12,Electronics,436,2026-02-10
+33,34,order33@buyer33.com,Wireless Gadget Model 13,Electronics,449,2026-02-10
+34,35,order34@buyer34.com,Wireless Gadget Model 14,Electronics,462,2026-02-10
+35,36,order35@buyer35.com,Wireless Gadget Model 15,Electronics,475,2026-02-10
+36,37,order36@buyer36.com,Wireless Gadget Model 16,Electronics,488,2026-02-10
+37,38,order37@buyer37.com,Wireless Gadget Model 17,Electronics,21,2026-02-10
+38,39,order38@buyer38.com,Wireless Gadget Model 18,Electronics,34,2026-02-10
+39,40,order39@buyer39.com,Wireless Gadget Model 19,Electronics,47,2026-02-10
+40,1,order40@buyer40.com,Wireless Gadget Model 0,Electronics,60,2026-02-10
+41,2,order41@buyer41.com,Wireless Gadget Model 1,Electronics,73,2026-02-10
+42,3,order42@buyer42.com,Wireless Gadget Model 2,Electronics,86,2026-02-10
+43,4,order43@buyer43.com,Wireless Gadget Model 3,Electronics,99,2026-02-10
+44,5,order44@buyer44.com,Wireless Gadget Model 4,Electronics,112,2026-02-10
+45,6,order45@buyer45.com,Wireless Gadget Model 5,Electronics,125,2026-02-10
+46,7,order46@buyer46.com,Wireless Gadget Model 6,Electronics,138,2026-02-10
+47,8,order47@buyer47.com,Wireless Gadget Model 7,Electronics,151,2026-02-10
+48,9,order48@buyer48.com,Wireless Gadget Model 8,Electronics,164,2026-02-10
+49,10,order49@buyer49.com,Wireless Gadget Model 9,Electronics,177,2026-02-10
+50,11,order50@buyer50.com,Wireless Gadget Model 10,Electronics,190,2026-02-10
+51,12,order51@buyer51.com,Wireless Gadget Model 11,Electronics,203,2026-02-10
+52,13,order52@buyer52.com,Wireless Gadget Model 12,Electronics,216,2026-02-10
+53,14,order53@buyer53.com,Wireless Gadget Model 13,Electronics,229,2026-02-10
+54,15,order54@buyer54.com,Wireless Gadget Model 14,Electronics,242,2026-02-10
+55,16,order55@buyer55.com,Wireless Gadget Model 15,Electronics,255,2026-02-10
+56,17,order56@buyer56.com,Wireless Gadget Model 16,Electronics,268,2026-02-10
+57,18,order57@buyer57.com,Wireless Gadget Model 17,Electronics,281,2026-02-10
+58,19,order58@buyer58.com,Wireless Gadget Model 18,Electronics,294,2026-02-10
+59,20,order59@buyer59.com,Wireless Gadget Model 19,Electronics,307,2026-02-10
+60,21,order60@buyer60.com,Wireless Gadget Model 0,Electronics,320,2026-02-10
+61,22,order61@buyer61.com,Wireless Gadget Model 1,Electronics,333,2026-02-10
+62,23,order62@buyer62.com,Wireless Gadget Model 2,Electronics,346,2026-02-10
+63,24,order63@buyer63.com,Wireless Gadget Model 3,Electronics,359,2026-02-10
+64,25,order64@buyer64.com,Wireless Gadget Model 4,Electronics,372,2026-02-10
+65,26,order65@buyer65.com,Wireless Gadget Model 5,Electronics,385,2026-02-10
+66,27,order66@buyer66.com,Wireless Gadget Model 6,Electronics,398,2026-02-10
+67,28,order67@buyer67.com,Wireless Gadget Model 7,Electronics,411,2026-02-10
+68,29,order68@buyer68.com,Wireless Gadget Model 8,Electronics,424,2026-02-10
+69,30,order69@buyer69.com,Wireless Gadget Model 9,Electronics,437,2026-02-10
+70,31,order70@buyer70.com,Wireless Gadget Model 10,Electronics,450,2026-02-10
+71,32,order71@buyer71.com,Wireless Gadget Model 11,Electronics,463,2026-02-10
+72,33,order72@buyer72.com,Wireless Gadget Model 12,Electronics,476,2026-02-10
+73,34,order73@buyer73.com,Wireless Gadget Model 13,Electronics,489,2026-02-10
+74,35,order74@buyer74.com,Wireless Gadget Model 14,Electronics,22,2026-02-10
+75,36,order75@buyer75.com,Wireless Gadget Model 15,Electronics,35,2026-02-10
+76,37,order76@buyer76.com,Wireless Gadget Model 16,Electronics,48,2026-02-10
+77,38,order77@buyer77.com,Wireless Gadget Model 17,Electronics,61,2026-02-10
+78,39,order78@buyer78.com,Wireless Gadget Model 18,Electronics,74,2026-02-10
+79,40,order79@buyer79.com,Wireless Gadget Model 19,Electronics,87,2026-02-10
+80,1,order80@buyer80.com,Wireless Gadget Model 0,Electronics,100,2026-02-10
+81,2,order81@buyer81.com,Wireless Gadget Model 1,Electronics,113,2026-02-10
+82,3,order82@buyer82.com,Wireless Gadget Model 2,Electronics,126,2026-02-10
+83,4,order83@buyer83.com,Wireless Gadget Model 3,Electronics,139,2026-02-10
+84,5,order84@buyer84.com,Wireless Gadget Model 4,Electronics,152,2026-02-10
+85,6,order85@buyer85.com,Wireless Gadget Model 5,Electronics,165,2026-02-10
+86,7,order86@buyer86.com,Wireless Gadget Model 6,Electronics,178,2026-02-10
+87,8,order87@buyer87.com,Wireless Gadget Model 7,Electronics,191,2026-02-10
+88,9,order88@buyer88.com,Wireless Gadget Model 8,Electronics,204,2026-02-10
+89,10,order89@buyer89.com,Wireless Gadget Model 9,Electronics,217,2026-02-10
+90,11,order90@buyer90.com,,Electronics,230,2026-02-10
+91,12,order91@buyer91.com,,Electronics,243,2026-02-10
+92,13,order92@buyer92.com,,Electronics,256,2026-02-10
+93,14,order93@buyer93.com,,Electronics,269,2026-02-10
+94,15,order94@buyer94.com,,Electronics,282,2026-02-10
+95,16,order95@buyer95.com,,Electronics,295,2026-02-10
+96,17,order96@buyer96.com,,Electronics,308,2026-02-10
+97,18,order97@buyer97.com,,Electronics,321,2026-02-10
+98,19,order98@buyer98.com,,Electronics,334,2026-02-10
+99,20,order99@buyer99.com,,Electronics,347,2026-02-10
+9000,1,order9000@buyer9000.com,Wireless Gadget Model 0,Electronics,380,2026-02-10
+9000,1,order9000@buyer9000.com,Wireless Gadget Model 0,Electronics,380,2026-02-10
+9001,2,order9001@buyer9001.com,Wireless Gadget Model 1,Electronics,393,2026-02-10
+9001,2,order9001@buyer9001.com,Wireless Gadget Model 1,Electronics,393,2026-02-10
+9002,3,order9002@buyer9002.com,Wireless Gadget Model 2,Electronics,406,2026-02-10
+9002,3,order9002@buyer9002.com,Wireless Gadget Model 2,Electronics,406,2026-02-10
+106,27,bad-email-format,Wireless Gadget Model 6,Electronics,438,2026-02-10
+107,28,order107@buyer107.com,Wireless Gadget Model 7,Electronics,451,not-a-date
+108,29,bad-email-format,Wireless Gadget Model 8,Electronics,464,2026-02-10
+109,30,order109@buyer109.com,Wireless Gadget Model 9,Electronics,477,not-a-date
+110,31,bad-email-format,Wireless Gadget Model 10,Electronics,490,2026-02-10
+111,32,order111@buyer111.com,Wireless Gadget Model 11,Electronics,23,not-a-date
+112,33,bad-email-format,Wireless Gadget Model 12,Electronics,36,2026-02-10
+113,34,order113@buyer113.com,Wireless Gadget Model 13,Electronics,49,not-a-date
+114,35,bad-email-format,Wireless Gadget Model 14,Electronics,62,2026-02-10
+115,36,order115@buyer115.com,Wireless Gadget Model 15,Electronics,75,not-a-date
+116,37,order116@buyer116.com,Wireless Gadget Model 16,Electronics,660000,2026-02-10
+117,38,order117@buyer117.com,Wireless Gadget Model 17,Electronics,665000,2026-02-10
+118,39,order118@buyer118.com,Wireless Gadget Model 18,Electronics,670000,2026-02-10
+119,40,order119@buyer119.com,Wireless Gadget Model 19,Electronics,675000,2026-02-10
+120,1,order120@buyer120.com,Wireless Gadget Model 0,Electronics,680000,2026-02-10
+121,9999,order121@buyer121.com,Wireless Gadget Model 1,Electronics,153,2026-02-10
+122,9999,order122@buyer122.com,Wireless Gadget Model 2,Electronics,166,2026-02-10
+123,9999,order123@buyer123.com,Wireless Gadget Model 3,Electronics,179,2026-02-10
+124,9999,order124@buyer124.com,Wireless Gadget Model 4,Electronics,192,2026-02-10
+125,9999,order125@buyer125.com,Wireless Gadget Model 5,Electronics,205,2026-02-10
+126,9999,order126@buyer126.com,Wireless Gadget Model 6,Electronics,218,2026-02-10
+127,9999,order127@buyer127.com,Wireless Gadget Model 7,Electronics,231,2026-02-10
+128,9,order128@buyer128.com,Organic Bananas,Electronics,244,2026-02-10
+129,10,order129@buyer129.com,Fresh Roses Bouquet,Electronics,257,2026-02-10
+130,11,order130@buyer130.com,Yoga Mat,Electronics,270,2026-02-10
+131,12,order131@buyer131.com,Handmade Soap Bar,Electronics,283,2026-02-10
+132,13,order132@buyer132.com,Cotton Bath Towel,Electronics,296,2026-02-10
+133,14,order133@buyer133.com,Ceramic Coffee Mug,Electronics,309,2026-02-10
+134,15,order134@buyer134.com,Leather Wallet,Electronics,322,2026-02-10
+135,16,order135@buyer135.com,Wool Scarf,Electronics,335,2026-02-10
+136,17,order136@buyer136.com,Garden Trowel,Electronics,348,2026-02-10
+137,18,order137@buyer137.com,Scented Candle,Electronics,361,2026-02-10
+138,19,order138@buyer138.com,Wireless Gadget Model 18,Electronics,374,2026-02-10
+139,20,order139@buyer139.com,Wireless Gadget Model 19,Electronics,387,2026-02-10
+140,21,order140@buyer140.com,Wireless Gadget Model 0,Electronics,400,2026-02-10
+141,22,order141@buyer141.com,Wireless Gadget Model 1,Electronics,413,2026-02-10
+142,23,order142@buyer142.com,Wireless Gadget Model 2,Electronics,426,2026-02-10
+143,24,order143@buyer143.com,Wireless Gadget Model 3,Electronics,439,2026-02-10
+144,25,order144@buyer144.com,Wireless Gadget Model 4,Electronics,452,2026-02-10
+145,26,order145@buyer145.com,Wireless Gadget Model 5,Electronics,465,2026-02-10
+146,27,order146@buyer146.com,Wireless Gadget Model 6,Electronics,478,2026-02-10
+147,28,order147@buyer147.com,Wireless Gadget Model 7,Electronics,491,2026-02-10
+148,29,order148@buyer148.com,Wireless Gadget Model 8,Electronics,24,2026-02-10
+149,30,order149@buyer149.com,Wireless Gadget Model 9,Electronics,37,2026-02-10

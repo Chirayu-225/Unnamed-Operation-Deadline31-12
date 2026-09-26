@@ -1,0 +1,21 @@
+id,account_id,amount,stage
+1,28,148940,Qualification
+2,9501,11658,Prospecting
+3,23,93671,Proposal
+4,9503,57053,Closed Won
+5,22,76517,Closed Lost
+6,3,77242,Prospecting
+7,15,228041,Qualification
+8,30,124926,Qualification
+9,29,166073,Closed Won
+10,13,182061,Proposal
+11,15,147783,Qualification
+12,22,249904,Closed Lost
+13,7,240837,Proposal
+14,24,218031,Proposal
+15,2,41304,Proposal
+16,20,187325,Closed Won
+17,9516,14799,Prospecting
+18,8,106547,Qualification
+19,9518,55906,Closed Lost
+20,5,239460,Closed Won

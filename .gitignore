@@ -1,0 +1,29 @@
+# Secrets — never commit real keys
+.env
+.env.local
+service/.env
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Python virtual environments — any name, any depth
+.venv/
+venv/
+env/
+rip/
+service/.venv/
+service/venv/
+service/rip/
+
+# Node / Next.js (frontend lives at repo root in this project)
+node_modules/
+.next/
+next-env.d.ts
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
