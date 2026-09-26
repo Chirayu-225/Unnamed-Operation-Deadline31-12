@@ -1,4 +1,4 @@
-# DBCaaS — Phase 0 Scaffolding
+# Connectivity Service Platform with Agentic Evaluation (Phase 1 of 3)
 
 Schema-agnostic data connectivity + agentic data quality detection.
 
