@@ -22,6 +22,7 @@ crash. A model that returns garbage should never take down a scan.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import random
 
@@ -86,6 +87,33 @@ class SemanticReasoningResult(BaseModel):
     rows_sampled: int
     sampled_indices: list[int]
     raw_response: str  # kept for debugging / future verifier evidence-checking
+    # True when `raw_response` couldn't be parsed as the expected JSON
+    # shape. `flags` is [] either way (fail-safe), but a parse failure
+    # is a DIFFERENT fact than "the model looked and found nothing
+    # wrong" — see _parse_response's docstring and the caller
+    # (GeneratorAgent._run_semantic_with_iteration), which must not
+    # let these sampled_indices count as "reasoned over and clean."
+    parse_failed: bool = False
+
+
+def _content_seed(table: CanonicalTable) -> int:
+    """A deterministic seed derived from the table's own content, not
+    the wall clock or OS entropy. Reproduced bug this fixes: two scans
+    of the exact same file could sample different rows (unseeded
+    `random.sample`) and therefore return different flags and a
+    different score for identical input — unacceptable for a product
+    whose entire value proposition is a trustworthy number. Hashing
+    the table's actual rows (not just its name/size) means two
+    genuinely different files that happen to share a name and row
+    count still get different seeds, while a true re-upload of the
+    same file always reproduces the same sampling, and therefore the
+    same result."""
+    h = hashlib.sha256()
+    h.update(table.table_name.encode("utf-8", errors="replace"))
+    h.update(str(len(table.rows)).encode())
+    for row in table.rows:
+        h.update(repr(sorted(row.items(), key=lambda kv: kv[0])).encode("utf-8", errors="replace"))
+    return int.from_bytes(h.digest()[:8], "big")
 
 
 def _build_user_prompt(
@@ -106,7 +134,17 @@ def _build_user_prompt(
     )
 
 
-def _parse_response(raw: str) -> list[SemanticFlag]:
+def _parse_response(raw: str) -> tuple[list[SemanticFlag], bool]:
+    """Returns (flags, parse_failed). Malformed output still fails
+    SAFE (empty flags, never a crash) — but it must not fail SILENT.
+    A caller that only looked at `flags == []` couldn't tell "the
+    model looked at these rows and found nothing" apart from "the
+    model's output was garbage and these rows were never really
+    judged at all." Treating those as identical is itself a bug: it
+    means a parse failure reads as "these rows are clean" and pushes
+    the score up, exactly backwards from what a coverage gap should
+    do. `parse_failed=True` is what lets the caller record this as a
+    gap instead — see GeneratorAgent._run_semantic_with_iteration."""
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.strip("`")
@@ -125,17 +163,25 @@ def _parse_response(raw: str) -> list[SemanticFlag]:
                     confidence=float(f.get("confidence", 0.5)),
                 )
             )
-        return flags
+        return flags, False
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-        # Fail safe — malformed model output should never crash a scan,
-        # it should just mean "no semantic flags this round."
-        return []
+        return [], True
 
 
 class SemanticReasoner:
     def __init__(self, llm: LLMClient, sample_size: int = _DEFAULT_SAMPLE_SIZE):
         self.llm = llm
         self.sample_size = sample_size
+        # Lazily seeded from the FIRST table this instance sees (see
+        # _content_seed) — one instance is reused across every batch
+        # of one scan (GeneratorAgent creates it once, outside its
+        # iteration loop), so seeding once here and letting this same
+        # Random object's state advance normally across calls still
+        # means: same file in -> same overall sequence of batches out,
+        # while different batches within one scan draw different
+        # (deterministically ordered) rows from each other, same as
+        # unseeded random.sample did — just reproducible now.
+        self._rng: random.Random | None = None
 
     def run(
         self,
@@ -179,12 +225,15 @@ class SemanticReasoner:
         batches in the same scan (the iteration loop in GeneratorAgent
         reuses this instance across cycles) don't have to rediscover
         the same 413 from scratch."""
+        if self._rng is None:
+            self._rng = random.Random(_content_seed(table))
+
         pool_indices = [i for i in range(len(table.rows)) if not exclude_indices or i not in exclude_indices]
         current_size = self.sample_size
 
         while True:
             if len(pool_indices) > current_size:
-                sampled_indices = sorted(random.sample(pool_indices, current_size))
+                sampled_indices = sorted(self._rng.sample(pool_indices, current_size))
             else:
                 sampled_indices = pool_indices
             sample = [(i, table.rows[i]) for i in sampled_indices]
@@ -209,7 +258,7 @@ class SemanticReasoner:
         if current_size != self.sample_size:
             self.sample_size = current_size  # persist the size that actually worked
 
-        raw_flags = _parse_response(raw)
+        raw_flags, parse_failed = _parse_response(raw)
         # Only accept a flag for a row_index that was ACTUALLY shown in
         # this batch — never trust an index the model returns wholesale.
         # This matters beyond ordinary hallucination: a row's own
@@ -227,4 +276,5 @@ class SemanticReasoner:
             rows_sampled=len(sample),
             sampled_indices=[i for i, _ in sample],
             raw_response=raw,
+            parse_failed=parse_failed,
         )

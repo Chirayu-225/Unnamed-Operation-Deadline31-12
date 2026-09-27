@@ -1,6 +1,5 @@
 # Secrets — never commit real keys
 .env
-.env.local
 service/.env
 
 # Python
@@ -9,21 +8,28 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 
-# Python virtual environments — any name, any depth
+# Python virtual environments — any of the common names, anywhere in
+# the repo (not just service/), so a venv created in a different spot
+# still gets caught.
 .venv/
 venv/
-env/
 rip/
-service/.venv/
-service/venv/
-service/rip/
+env/
+.venv*/
+venv*/
+ENV/
 
-# Node / Next.js (frontend lives at repo root in this project)
+# Node / Next.js — node_modules and build output wherever they land,
+# not just under frontend/, so a nested package or a future workspace
+# doesn't need its own entry.
 node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
 .next/
-next-env.d.ts
 npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # OS
 .DS_Store
-Thumbs.db

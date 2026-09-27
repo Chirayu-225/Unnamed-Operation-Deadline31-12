@@ -241,12 +241,21 @@ class GroqClient(LLMClient):
         )
 
     def complete(self, system_prompt: str, user_prompt: str) -> str:
+        # temperature=0 — a reproduced bug: two scans of the identical
+        # file could return different flags (and therefore a different
+        # score) because neither the sampling nor the model call itself
+        # was deterministic. Row sampling is now seeded from the
+        # table's own content (see semantic_reasoning.py's
+        # _content_seed); this is the other half — pinning the model
+        # to its most deterministic setting so the SAME sampled rows
+        # also get the SAME judgment call to call.
         response = self._client.chat.completions.create(
             model=self._model,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
+            temperature=0,
         )
         return response.choices[0].message.content or ""
 
@@ -273,9 +282,11 @@ class GeminiClient(LLMClient):
     def complete(self, system_prompt: str, user_prompt: str) -> str:
         from google.genai import types
 
+        # temperature=0 — same determinism fix as GroqClient.complete;
+        # see that method's comment for the reproduced bug this closes.
         response = self._client.models.generate_content(
             model=self._model,
             contents=user_prompt,
-            config=types.GenerateContentConfig(system_instruction=system_prompt),
+            config=types.GenerateContentConfig(system_instruction=system_prompt, temperature=0),
         )
         return response.text or ""

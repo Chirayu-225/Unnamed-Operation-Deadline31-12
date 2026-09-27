@@ -96,6 +96,23 @@ class ScanResult(BaseModel):
     flagged_row_indices: list[int]
     semantic_iterations: int = 0
     semantic_coverage_warning: str | None = None
+    # Rows the deterministic prompt-injection backstop
+    # (app/checks/injection_detection.py) flagged with at least one
+    # HIGH-confidence manipulation signal — a SUBSET of
+    # flagged_row_indices, not a separate universe (a quarantined row
+    # is still visible in the ordinary review list; it just never
+    # contributes to any quality score — see app/scoring/scorer.py,
+    # which skips this check_name entirely when building Findings —
+    # and is structurally excluded from ever being sampled into a
+    # semantic-reasoning batch, see `run` below). A row whose ONLY
+    # injection-check match was LOW-confidence (ambiguous business
+    # language — see injection_detection.py's module docstring) is
+    # NOT in this list: it's still reported (a low-severity
+    # SecurityFinding, see main.py) but stays fully eligible for
+    # normal semantic review, since an ambiguous phrase alone must
+    # never be a free pass out of the one layer that catches what a
+    # regex can't.
+    quarantined_row_indices: list[int] = []
 
     @property
     def total_flagged(self) -> int:
@@ -131,6 +148,7 @@ class GeneratorAgent:
         instruction: str | None,
         max_llm_calls: int | None = None,
         sample_size: int | None = None,
+        quarantined_indices: set[int] | None = None,
     ) -> tuple[list[SemanticFlag], int, str | None]:
         """Batches through the semantic reasoner until every row in the
         table has been sampled at least once — full coverage by
@@ -163,10 +181,41 @@ class GeneratorAgent:
         batch-size sweep against the eval harness: run the same
         dataset at a few sizes, compare precision/recall, pick the
         largest size where detection quality hasn't measurably
-        dropped, rather than guessing a number."""
+        dropped, rather than guessing a number.
+
+        `quarantined_indices`, when given, seeds `sampled_indices` up
+        front rather than changing `total_rows`. These are rows the
+        deterministic prompt-injection check flagged with a
+        HIGH-confidence manipulation signal specifically (see
+        app/checks/injection_detection.py's two-tier design) — they
+        must never be sent to an LLM prompt, full stop, not merely
+        excluded from the score. A LOW-confidence-only match is
+        deliberately NOT in this set — see GeneratorAgent.run's own
+        comment on why an ambiguous phrase must not blind semantic
+        review. Pre-seeding accomplishes containment
+        (SemanticReasoner.run's `exclude_indices` guarantees a
+        quarantined row is never selected into any batch) while also
+        keeping the loop's own termination condition correct: since
+        `total_rows` already implicitly expects every row to be
+        accounted for exactly once, a quarantined row counting as
+        "already accounted for" from the very first iteration is what
+        makes `len(sampled_indices) < total_rows` become false at the
+        right point, instead of looping forever hunting for rows it's
+        mathematically forbidden to ever pick. `total_rows` itself is
+        deliberately left as the table's real row count — see `run()`
+        below for how the gap this creates (fewer rows actually
+        reasoned over than the file contains) is surfaced honestly to
+        the API caller rather than hidden by shrinking this number."""
         reasoner = SemanticReasoner(llm, **({"sample_size": sample_size} if sample_size else {}))
         all_flags: list[SemanticFlag] = []
-        sampled_indices: set[int] = set()
+        sampled_indices: set[int] = set(quarantined_indices or ())
+        # Rows a batch attempted but whose model output didn't parse —
+        # tracked SEPARATELY from sampled_indices below. These rows
+        # still count toward "attempted" so the loop terminates rather
+        # than retrying the exact same unparseable batch forever, but
+        # they are NOT treated as "reasoned over and clean" — see the
+        # coverage_warning built after the loop.
+        unparsed_indices: set[int] = set()
         calls_made = 0
         total_rows = len(table.rows)
         coverage_warning: str | None = None
@@ -215,6 +264,19 @@ class GeneratorAgent:
 
             all_flags.extend(result.flags)
             sampled_indices.update(result.sampled_indices)
+            if result.parse_failed:
+                unparsed_indices.update(result.sampled_indices)
+
+        if unparsed_indices:
+            unparsed_note = (
+                f"{len(unparsed_indices)} row(s) were sampled by the semantic layer but the "
+                f"model's response for that batch couldn't be parsed — those rows were NOT "
+                f"reliably judged and should not be read as confirmed-clean just because no "
+                f"flag was returned for them."
+            )
+            coverage_warning = (
+                f"{coverage_warning} {unparsed_note}" if coverage_warning else unparsed_note
+            )
 
         return all_flags, calls_made, coverage_warning
 
@@ -255,9 +317,37 @@ class GeneratorAgent:
         checks = self.plan(table, context)
         results = self.execute(table, checks, context)
 
+        # The prompt-injection backstop is a security check, not a
+        # data-quality one — scorer.py independently skips this
+        # check_name entirely when building Findings, so NOTHING it
+        # flags ever dilutes or fakes a quality score, regardless of
+        # what follows here. But its flagged rows are NOT hidden from
+        # the ordinary `flagged` union below — a row must never
+        # silently disappear from the human-facing review list just
+        # because its problem was a security one rather than a quality
+        # one (a prior version of this code excluded it entirely here,
+        # which meant a row whose ONLY issue was an injection match
+        # could leave the report looking clean; fixed by including it
+        # below like any other check's flags).
+        #
+        # `quarantined` is a NARROWER, separate set: only rows carrying
+        # at least one HIGH-confidence match (see injection_detection.py's
+        # module docstring on the two-tier design) — these are excluded
+        # from semantic-reasoning sampling below, real containment, not
+        # just a scoring exclusion. A LOW-confidence-only match (ordinary
+        # business language like "pre-approved") is reported (visible in
+        # `flagged`, and as a low-severity SecurityFinding — see main.py)
+        # but does NOT pull the row out of semantic review — an
+        # over-broad match here must never become a free pass around
+        # the one detection layer built to catch what a regex can't.
+        quarantined: set[int] = set()
         flagged: set[int] = set()
         for r in results:
             flagged.update(r.flagged_row_indices)
+            if r.check_name == "prompt_injection_check":
+                quarantined.update(
+                    idx for idx in r.flagged_row_indices if r.row_severity.get(idx, "high") == "high"
+                )
 
         semantic_flags: list[SemanticFlag] = []
         verified_flags: list[VerifiedFlag] = []
@@ -305,6 +395,7 @@ class GeneratorAgent:
                         effective_instruction,
                         max_llm_calls=max_semantic_llm_calls,
                         sample_size=effective_sample_size,
+                        quarantined_indices=quarantined,
                     )
                 )
 
@@ -331,4 +422,5 @@ class GeneratorAgent:
             flagged_row_indices=sorted(flagged),
             semantic_iterations=semantic_iterations,
             semantic_coverage_warning=semantic_coverage_warning,
+            quarantined_row_indices=sorted(quarantined),
         )

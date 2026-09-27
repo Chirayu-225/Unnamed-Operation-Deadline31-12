@@ -164,11 +164,47 @@ class FlaggedRowOut(BaseModel):
     derived_confidence: float | None = None
 
 
+class SecurityFinding(BaseModel):
+    """A row the deterministic prompt-injection backstop
+    (app.checks.injection_detection) flagged as looking like a hostile
+    payload — a SEPARATE bucket from quality findings on purpose: it
+    never contributes to any metric score (see scorer.py's exclusion
+    of this check_name). It is NOT a substitute for flagged_rows —
+    the same row still appears there too (see ScanResponse.flagged_rows'
+    own note below), so this list is additive detail for a future
+    security-alerts UI, not the only place the row shows up.
+
+    `severity` is "high" or "low" (see injection_detection.py's
+    two-tier design): "high" means the row was also QUARANTINED —
+    excluded from semantic reasoning entirely, real containment, not
+    just a label (see quarantined_row_count below and
+    GeneratorAgent.run's containment logic). "low" means the language
+    matched is ambiguous, ordinary-sounding business phrasing
+    ("pre-approved", "compliance team") — reported for visibility, but
+    the row was NOT excluded from semantic review over it alone.
+    Frontend surfacing of this list is a follow-up ticket — this field
+    exists so the execution layer is functionally secure first."""
+
+    row_index: int
+    row_data: dict
+    matched_columns: list[str]
+    detail: str
+    severity: str  # "high" (quarantined) | "low" (reported only)
+
+
 class ScanResponse(BaseModel):
     table_name: str
     total_rows: int
     overall_score: float
     metric_scores: list[dict]
+    # Includes rows the prompt-injection backstop flagged (both
+    # severity tiers) — a row's problem being a security one rather
+    # than a quality one is never a reason for it to vanish from the
+    # human-facing review list. deterministic_reasons on such a row is
+    # prefixed "SECURITY (...)" so it's distinguishable at a glance;
+    # see security_findings below for the structured version of the
+    # same fact (matched columns, severity) meant for a future
+    # dedicated UI.
     flagged_rows: list[FlaggedRowOut]
     semantic_iterations: int
     llm_used: bool
@@ -179,6 +215,27 @@ class ScanResponse(BaseModel):
     # evaluation-logic change?" without needing any persistence layer;
     # the version travels with the response itself.
     versions: dict[str, str] = {}
+    # Prompt-injection findings (the "Quarantine Model") — kept as
+    # explicit fields rather than something the client must infer from
+    # total_rows vs. semantic_iterations' coverage. Includes BOTH
+    # severity tiers (see SecurityFinding.severity); quarantined_row_count
+    # below counts only the "high" subset, since that's the only one
+    # actually excluded from semantic reasoning.
+    security_findings: list[SecurityFinding] = []
+    # How many of total_rows were QUARANTINED (high-confidence match —
+    # see injection_detection.py) and therefore never reasoned over by
+    # the semantic layer and never scored under any quality metric. A
+    # low-confidence-only match is NOT counted here, since that row
+    # stays fully eligible for normal semantic review.
+    quarantined_row_count: int = 0
+    # The actual denominator the semantic layer reasoned over this
+    # scan: total_rows - quarantined_row_count. Exposed explicitly, the
+    # same "never make the caller derive a fact" convention as
+    # derived_confidence above and semantic_coverage_warning below —
+    # so a client sees directly why rows_evaluated (semantic_iterations'
+    # coverage) doesn't match total_rows, rather than having to notice
+    # security_findings exists and subtract its length itself.
+    semantic_rows_considered: int = 0
 
 
 def _resolve_custom_instruction(
@@ -276,12 +333,60 @@ def _run_table_scan(
     if result.semantic_coverage_warning:
         warnings.append(result.semantic_coverage_warning)
 
+    not_evaluated = [m.metric.value for m in scorecard.metric_scores if not m.evaluated]
+    if not_evaluated:
+        warnings.append(
+            f"Not evaluated this scan (no applicable check ran): {', '.join(not_evaluated)}. "
+            f"These are excluded from overall_score, not counted as 100."
+        )
+
+    quarantined_row_count = len(result.quarantined_row_indices)
+    if quarantined_row_count > 0:
+        warnings.append(
+            f"{quarantined_row_count} row(s) were quarantined as a security threat "
+            f"(high-confidence prompt-injection payload detected) — see "
+            f"security_findings. These rows are excluded from every quality metric "
+            f"and were never sent to an LLM prompt; semantic_rows_considered "
+            f"reflects the reduced coverage this causes."
+        )
+
+    injection_check_result = next(
+        (r for r in result.check_results if r.check_name == "prompt_injection_check"), None
+    )
+    security_findings: list[SecurityFinding] = []
+    if injection_check_result is not None:
+        # Both severity tiers are reported here — not just the
+        # quarantined subset — so a low-confidence match (still a real
+        # signal worth a human's attention) isn't invisible just
+        # because it didn't clear the bar for containment.
+        for idx in injection_check_result.flagged_row_indices:
+            severity = injection_check_result.row_severity.get(idx, "high")
+            security_findings.append(
+                SecurityFinding(
+                    row_index=idx,
+                    row_data=table.rows[idx] if idx < len(table.rows) else {},
+                    matched_columns=injection_check_result.flagged_fields.get(idx, []),
+                    detail=injection_check_result.detail,
+                    severity=severity,
+                )
+            )
+
     det_reasons_by_row: dict[int, list[str]] = {}
     for check_result in result.check_results:
         for idx in check_result.flagged_row_indices:
-            det_reasons_by_row.setdefault(idx, []).append(
-                f"{check_result.check_name}: {check_result.detail}"
-            )
+            if check_result.check_name == "prompt_injection_check":
+                # Distinctly labeled rather than skipped — see
+                # FlaggedRowOut/ScanResponse.flagged_rows' own note:
+                # a row must stay visible in the ordinary review list
+                # even when its problem is a security one.
+                severity = check_result.row_severity.get(idx, "high")
+                det_reasons_by_row.setdefault(idx, []).append(
+                    f"SECURITY ({severity}-confidence prompt-injection match): {check_result.detail}"
+                )
+            else:
+                det_reasons_by_row.setdefault(idx, []).append(
+                    f"{check_result.check_name}: {check_result.detail}"
+                )
 
     semantic_by_row = {f.row_index: f for f in result.semantic_flags}
     verified_by_row = {v.row_index: v for v in result.verified_flags}
@@ -322,6 +427,9 @@ def _run_table_scan(
         compilation=result.compilation.model_dump() if result.compilation else None,
         warnings=warnings,
         versions=_current_versions(llm, verifier_llm),
+        security_findings=security_findings,
+        quarantined_row_count=quarantined_row_count,
+        semantic_rows_considered=len(table.rows) - quarantined_row_count,
     )
     return response, result
 
@@ -619,6 +727,15 @@ async def run_schema_scan(
 
     table_responses: list[ScanResponse] = []
     cross_table_findings: list[CrossTableFinding] = []
+    # Each table's quarantined row indices, keyed by table_name — built
+    # during the per-table loop below, then used to filter the
+    # cross-table semantic pass afterward so a pair touching a
+    # quarantined row on EITHER side (child or parent) never reaches an
+    # LLM prompt. No changes needed to cross_table_reasoning.py itself:
+    # filtering happens entirely here, at the orchestration layer,
+    # reusing resolve_fk_pairs/run_cross_table_semantic_with_iteration
+    # unmodified.
+    quarantined_by_table: dict[str, set[int]] = {}
     for table in tables:
         instruction = instructions_map.get(table.table_name) if llm is not None else None
         response, result = _run_table_scan(
@@ -631,6 +748,7 @@ async def run_schema_scan(
         )
         table_responses.append(response)
         cross_table_findings.extend(_extract_cross_table_findings(table, context, result))
+        quarantined_by_table[table.table_name] = set(result.quarantined_row_indices)
 
     # Cross-table SEMANTIC pass — content-level judgment on pairs whose
     # FK already resolves, as opposed to the structural check above
@@ -642,6 +760,20 @@ async def run_schema_scan(
     if llm is not None:
         for child, parent, fk_col in _find_fk_relationships(tables, context):
             pairs = resolve_fk_pairs(child, parent, fk_col)
+            child_quarantined = quarantined_by_table.get(child.table_name, set())
+            parent_quarantined = quarantined_by_table.get(parent.table_name, set())
+            if child_quarantined or parent_quarantined:
+                # Containment on the cross-table path too: a pair
+                # touching a quarantined row on EITHER side is dropped
+                # before it ever reaches the LLM, not merely excluded
+                # from scoring afterward. resolve_fk_pairs and
+                # run_cross_table_semantic_with_iteration themselves
+                # are untouched — this filter is the entire fix.
+                pairs = [
+                    (c, p)
+                    for c, p in pairs
+                    if c not in child_quarantined and p not in parent_quarantined
+                ]
             if not pairs:
                 continue
             flags, _calls, coverage_warning = run_cross_table_semantic_with_iteration(

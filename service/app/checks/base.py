@@ -42,6 +42,16 @@ class CheckResult(BaseModel):
     # on an optional field, instead of treating every flagged row
     # identically regardless of which column caused it.
     flagged_fields: dict[int, list[str]] = {}
+    # Optional per-row confidence tier: row_index -> "high" | "low".
+    # Same backward-compatible pattern as flagged_fields above — empty
+    # for every check except PromptInjectionCheck, which uses this to
+    # distinguish an unambiguous manipulation attempt (quarantine it —
+    # see app/agent/generator.py) from ambiguous business-sounding
+    # language that merely LOOKS similar (report it, but don't remove
+    # the row from semantic review over it). A row absent from this
+    # dict is treated as "high" by convention (the conservative
+    # default for any check that doesn't populate it at all).
+    row_severity: dict[int, str] = {}
 
 
 class Check(ABC):

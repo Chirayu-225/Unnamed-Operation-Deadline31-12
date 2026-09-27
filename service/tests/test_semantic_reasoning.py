@@ -91,6 +91,23 @@ def test_fails_safe_on_malformed_json():
     assert result.flags == []  # no crash, just no flags
 
 
+def test_malformed_json_is_flagged_as_a_parse_failure_not_silently_clean():
+    """Reproduced bug: a parse failure returned zero flags, and those
+    rows were then recorded as covered — indistinguishable from "the
+    model looked and found nothing wrong." parse_failed=True is what
+    lets a caller (GeneratorAgent) treat this as a coverage gap
+    instead of silently counting it as a clean result."""
+    llm = _FakeLLM("this is not json at all, sorry")
+    result = SemanticReasoner(llm).run(_table())
+    assert result.parse_failed is True
+
+
+def test_well_formed_json_is_not_flagged_as_a_parse_failure():
+    llm = _FakeLLM('{"flags": []}')
+    result = SemanticReasoner(llm).run(_table())
+    assert result.parse_failed is False
+
+
 def test_fails_safe_on_missing_required_fields():
     llm = _FakeLLM('{"flags": [{"row_index": 1}]}')  # missing "reason"
     result = SemanticReasoner(llm).run(_table())
@@ -125,21 +142,42 @@ def test_sample_size_limits_rows_sent():
     assert result.rows_sampled == 10
 
 
-def test_sampled_indices_matches_the_rows_actually_sent():
-    """Sampling is random (see the "random, not sequential" note on
-    `run()`), so this checks that exactly one VALID row index came
-    back — not which one — across enough repeats to catch a
-    regression back to "always row 0"."""
+def test_sampling_is_deterministic_for_the_same_table_content():
+    """Reproduced bug: two scans of the identical file could sample
+    different rows (unseeded random.sample) and therefore return
+    different flags and a different score for identical input.
+    Sampling is now seeded from the table's own content (see
+    _content_seed), so a fresh SemanticReasoner instance given the
+    SAME table always draws the SAME sample — this replaces the old
+    "eventually both indices show up" randomness check, since genuine
+    randomness is no longer the intended behavior for repeat scans of
+    one file."""
     llm = _FakeLLM('{"flags": []}')
-    seen_indices = set()
-    for _ in range(30):
-        result = SemanticReasoner(llm, sample_size=1).run(_table())
-        assert len(result.sampled_indices) == 1
-        assert result.sampled_indices[0] in (0, 1)
-        seen_indices.add(result.sampled_indices[0])
-    # With 30 draws from {0, 1}, both should show up if sampling is
-    # genuinely random rather than a fixed "always row 0".
-    assert seen_indices == {0, 1}
+    results = [SemanticReasoner(llm, sample_size=1).run(_table()).sampled_indices for _ in range(10)]
+    assert all(r == results[0] for r in results)
+    assert results[0][0] in (0, 1)
+
+
+def test_sampling_differs_for_genuinely_different_table_content():
+    """The seed is derived from the table's actual row content, not
+    just its shape — two tables with different data (even same name,
+    same row count) must not be locked into an identical sample
+    purely because determinism was added; only a true re-scan of the
+    SAME file should reproduce the SAME sample."""
+    llm = _FakeLLM('{"flags": []}')
+    table_a = CanonicalTable(
+        tenant_id="t", source_id="s", table_name="big",
+        columns=[ColumnSchema(name="x", type=ColumnType.STRING)],
+        rows=[{"x": str(i)} for i in range(50)],
+    )
+    table_b = CanonicalTable(
+        tenant_id="t", source_id="s", table_name="big",
+        columns=[ColumnSchema(name="x", type=ColumnType.STRING)],
+        rows=[{"x": str(i + 1000)} for i in range(50)],  # same shape, different content
+    )
+    sample_a = SemanticReasoner(llm, sample_size=5).run(table_a).sampled_indices
+    sample_b = SemanticReasoner(llm, sample_size=5).run(table_b).sampled_indices
+    assert sample_a != sample_b
 
 
 def test_exclude_indices_skips_already_sampled_rows():
